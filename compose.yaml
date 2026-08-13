@@ -1,5 +1,5 @@
 services:
-    laravel.test:
+    juno-api:
         build:
             context: './vendor/laravel/sail/runtimes/8.5'
             dockerfile: Dockerfile
@@ -9,7 +9,7 @@ services:
         extra_hosts:
             - 'host.docker.internal:host-gateway'
         ports:
-            - '${APP_PORT:-80}:80'
+            - '${APP_PORT:-8000}:80'
             - '${VITE_PORT:-5173}:${VITE_PORT:-5173}'
         environment:
             WWWUSER: '${WWWUSER}'

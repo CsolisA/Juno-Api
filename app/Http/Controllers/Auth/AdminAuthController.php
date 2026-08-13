@@ -38,4 +38,11 @@ class AdminAuthController extends Controller
             'token' => $token,
         ]);
     }
+
+    public function me(Request $request)
+    {
+        abort_unless($request->user() instanceof AdminUser, 403);
+
+        return response()->json(['admin_user' => $request->user()]);
+    }
 }
