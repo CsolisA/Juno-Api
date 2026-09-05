@@ -3,8 +3,9 @@
 namespace Database\Seeders;
 
 use App\Enums\AdminUserType;
+use App\Enums\EnrollmentSource;
+use App\Enums\EnrollmentStatus;
 use App\Enums\GuardianRole;
-use App\Enums\Schedule;
 use App\Enums\TransportType;
 use App\Models\AcademicYear;
 use App\Models\AdminUser;
@@ -14,6 +15,7 @@ use App\Models\Grade;
 use App\Models\Group;
 use App\Models\Guardian;
 use App\Models\Kinder;
+use App\Models\Schedule;
 use App\Models\Student;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -31,6 +33,11 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        $this->call([
+            ScheduleSeeder::class,
+            ProvinceCantonSeeder::class,
+        ]);
+
         $kinder = Kinder::create([
             'name' => 'KSorpresita',
             'main_color' => '#f5191b',
@@ -65,7 +72,11 @@ class DatabaseSeeder extends Seeder
         $groups = [];
 
         foreach ($levels as $index => $levelName) {
-            $grade = Grade::create(['name' => $levelName]);
+            $grade = Grade::create([
+                'name' => $levelName,
+                'order' => $index,
+                'is_final' => $index === count($levels) - 1,
+            ]);
 
             $teacher = AdminUser::create([
                 'kinder_id' => $kinder->id,
@@ -89,6 +100,10 @@ class DatabaseSeeder extends Seeder
             ]);
         }
 
+        $this->call([
+            ScheduleGradeSeeder::class,
+        ]);
+
         $family = Family::create([
             'kinder_id' => $kinder->id,
             'last_name_one' => 'Rodríguez',
@@ -103,18 +118,19 @@ class DatabaseSeeder extends Seeder
             'family_id' => $family->id,
             'role' => GuardianRole::Mother,
             'name' => 'María',
-            'last_name' => 'Mora',
+            'last_name_one' => 'Mora',
             'nationality' => 'Costarricense',
-            'national_id' => '1-2345-6789',
-            'age' => 32,
-            'civil_status' => 'Casada',
-            'education' => 'Universitaria',
-            'profession' => 'Ingeniera',
+            'id_number' => '1-2345-6789',
+            'birth_date' => '1994-04-02',
+            'marital_status' => 'Casada',
+            'education_level' => 'Universitaria',
+            'occupation' => 'Ingeniera',
             'workplace' => 'Empresa Privada',
-            'cell_phone' => '8888-3000',
+            'mobile_phone' => '8888-3000',
             'address' => 'San José, Costa Rica',
             'email' => 'maria.mora@example.test',
             'uses_whatsapp' => true,
+            'is_primary_contact' => true,
         ]);
 
         $students = [
@@ -123,7 +139,7 @@ class DatabaseSeeder extends Seeder
                 'last_name' => 'Rodríguez',
                 'last_name_two' => 'Mora',
                 'birth_date' => now()->subYears(3)->format('Y-m-d'),
-                'national_id' => '0-0001-0001',
+                'id_number' => '0-0001-0001',
                 'level' => 'Maternal',
             ],
             [
@@ -131,10 +147,12 @@ class DatabaseSeeder extends Seeder
                 'last_name' => 'Rodríguez',
                 'last_name_two' => 'Mora',
                 'birth_date' => now()->subYears(5)->format('Y-m-d'),
-                'national_id' => '0-0002-0002',
+                'id_number' => '0-0002-0002',
                 'level' => 'Preparatoria',
             ],
         ];
+
+        $presencialScheduleId = Schedule::where('code', 'PRESENCIAL')->value('id');
 
         foreach ($students as $studentData) {
             $group = $groups[$studentData['level']];
@@ -144,8 +162,7 @@ class DatabaseSeeder extends Seeder
                 'last_name' => $studentData['last_name'],
                 'last_name_two' => $studentData['last_name_two'],
                 'family_id' => $family->id,
-                'transport_type' => TransportType::Family,
-                'national_id' => $studentData['national_id'],
+                'id_number' => $studentData['id_number'],
                 'birth_date' => $studentData['birth_date'],
                 'nationality' => 'Costarricense',
                 'province' => 'San José',
@@ -159,7 +176,11 @@ class DatabaseSeeder extends Seeder
                 'student_id' => $student->id,
                 'academic_year_id' => $academicYear->id,
                 'group_id' => $group->id,
-                'schedule' => Schedule::InPerson,
+                'grade_id' => $group->grade_id,
+                'schedule_id' => $presencialScheduleId,
+                'status' => EnrollmentStatus::Active,
+                'source' => EnrollmentSource::Manual,
+                'transport_type' => TransportType::Family,
                 'enrollment_fee_amount' => 300.00,
                 'monthly_fee_amount' => 250.00,
                 'uniform_size' => '4',

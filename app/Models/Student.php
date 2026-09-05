@@ -2,34 +2,32 @@
 
 namespace App\Models;
 
-use App\Enums\TransportType;
+use App\Enums\IdType;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
-    'name', 'last_name', 'last_name_two', 'family_id', 'transport_type', 'national_id',
+    'name', 'last_name', 'last_name_two', 'family_id', 'id_number', 'id_type',
     'birth_date', 'insurance_policy_number', 'blood_type', 'nationality', 'province',
-    'canton', 'address', 'phone', 'medical_conditions', 'diagnosis', 'takes_medication',
-    'medication_details', 'plays_sport', 'sport_details', 'has_extracurricular_classes',
-    'extracurricular_details',
+    'canton', 'address', 'phone',
 ])]
 class Student extends Model
 {
+    use HasFactory;
+
     public $timestamps = false;
 
     protected function casts(): array
     {
         return [
-            'transport_type' => TransportType::class,
+            'id_type' => IdType::class,
             'birth_date' => 'date',
-            'takes_medication' => 'boolean',
-            'plays_sport' => 'boolean',
-            'has_extracurricular_classes' => 'boolean',
         ];
     }
 
