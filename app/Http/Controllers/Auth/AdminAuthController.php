@@ -19,7 +19,7 @@ class AdminAuthController extends Controller
 
         $adminUser = AdminUser::where('email', $credentials['email'])->first();
 
-        if (! $adminUser || ! Hash::check($credentials['password'], $adminUser->password)) {
+        if (! $adminUser || ! $adminUser->password || ! Hash::check($credentials['password'], $adminUser->password)) {
             throw ValidationException::withMessages([
                 'email' => __('auth.failed'),
             ]);

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\AdminUserType;
+use App\Enums\CredentialMethod;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -15,8 +16,9 @@ use Laravel\Sanctum\HasApiTokens;
     'kinder_id', 'name', 'email', 'phone', 'type', 'password',
     'emergency_phone', 'emergency_name', 'birth_date', 'hire_date',
     'status', 'address', 'psych_exam_date',
+    'credential_method', 'must_reset_password', 'invite_token', 'invite_expires_at',
 ])]
-#[Hidden(['password'])]
+#[Hidden(['password', 'invite_token'])]
 class AdminUser extends Authenticatable
 {
     use HasApiTokens;
@@ -33,6 +35,9 @@ class AdminUser extends Authenticatable
             'birth_date' => 'date',
             'hire_date' => 'date',
             'psych_exam_date' => 'date',
+            'credential_method' => CredentialMethod::class,
+            'must_reset_password' => 'boolean',
+            'invite_expires_at' => 'datetime',
         ];
     }
 

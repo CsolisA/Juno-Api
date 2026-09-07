@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\AcademicYearStatus;
 use App\Models\AcademicYear;
 use App\Models\Kinder;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -35,5 +36,20 @@ class AcademicYearFactory extends Factory
             'start_date' => now()->subMonth(),
             'end_date' => now()->addMonths(6),
         ]);
+    }
+
+    public function planeacion(): static
+    {
+        return $this->state(fn () => ['status' => AcademicYearStatus::Planeacion]);
+    }
+
+    public function activo(): static
+    {
+        return $this->state(fn () => ['status' => AcademicYearStatus::Activo]);
+    }
+
+    public function cerrado(): static
+    {
+        return $this->state(fn () => ['status' => AcademicYearStatus::Cerrado]);
     }
 }

@@ -1,13 +1,18 @@
 <?php
 
+use App\Http\Controllers\Admin\AcademicYearController;
+use App\Http\Controllers\Admin\GroupController;
 use App\Http\Controllers\Admin\PreEnrollment\CampaignController;
 use App\Http\Controllers\Admin\PreEnrollment\ExclusionController;
 use App\Http\Controllers\Admin\PreEnrollment\FormController;
 use App\Http\Controllers\Admin\PreEnrollment\ReadinessController;
 use App\Http\Controllers\Admin\PreEnrollment\SelectionController;
+use App\Http\Controllers\Admin\StaffController;
+use App\Http\Controllers\Admin\StudentGroupController;
 use App\Http\Controllers\Auth\AdminAuthController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\FamilyAuthController;
+use App\Http\Controllers\Auth\StaffInviteController;
 use App\Http\Controllers\Catalog\AcademicYearCatalogController;
 use App\Http\Controllers\Catalog\CantonCatalogController;
 use App\Http\Controllers\Catalog\GradeCatalogController;
@@ -29,6 +34,7 @@ Route::post('/admin/login', [AdminAuthController::class, 'login']);
 Route::post('/family/login', [FamilyAuthController::class, 'login']);
 Route::post('/family/password/forgot', [FamilyPasswordController::class, 'forgot']);
 Route::post('/family/password/reset', [FamilyPasswordController::class, 'reset']);
+Route::post('/auth/staff/accept-invite', [StaffInviteController::class, 'accept']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
@@ -69,7 +75,34 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('admin')->group(function () {
         Route::get('/catalogs/academic-years', [AcademicYearCatalogController::class, 'index']);
 
-        Route::prefix('admin/pre-enrollment')->group(function () {
+        Route::get('/admin/academic-years', [AcademicYearController::class, 'index']);
+        Route::post('/admin/academic-years/{academicYearId}/activate', [AcademicYearController::class, 'activate']);
+        Route::patch('/admin/academic-years/{academicYearId}/confirm', [AcademicYearController::class, 'confirm']);
+
+        Route::get('/admin/staff/roster', [StaffController::class, 'roster']);
+        Route::patch('/admin/staff/me', [StaffController::class, 'updateSelf']);
+
+        Route::middleware('director')->group(function () {
+            Route::get('/admin/staff', [StaffController::class, 'index']);
+            Route::post('/admin/staff', [StaffController::class, 'store']);
+            Route::get('/admin/staff/{staffId}', [StaffController::class, 'show'])->whereNumber('staffId');
+            Route::patch('/admin/staff/{staffId}', [StaffController::class, 'update'])->whereNumber('staffId');
+            Route::post('/admin/staff/{staffId}/deactivate', [StaffController::class, 'deactivate'])->whereNumber('staffId');
+            Route::post('/admin/staff/{staffId}/reactivate', [StaffController::class, 'reactivate'])->whereNumber('staffId');
+            Route::post('/admin/staff/{staffId}/reset-password', [StaffController::class, 'resetPassword'])->whereNumber('staffId');
+        });
+
+        Route::get('/admin/groups/me', [GroupController::class, 'mine']);
+
+        Route::middleware('director')->group(function () {
+            Route::get('/admin/groups', [GroupController::class, 'index']);
+            Route::get('/admin/groups/{groupId}', [GroupController::class, 'show'])->whereNumber('groupId');
+            Route::patch('/admin/groups/{groupId}', [GroupController::class, 'update'])->whereNumber('groupId');
+
+            Route::patch('/admin/students/{studentId}/group', [StudentGroupController::class, 'update']);
+        });
+
+        Route::middleware('director')->prefix('admin/pre-enrollment')->group(function () {
             Route::get('/campaigns', [CampaignController::class, 'index']);
             Route::post('/campaigns', [CampaignController::class, 'store']);
             Route::get('/campaigns/{campaignId}', [CampaignController::class, 'show']);

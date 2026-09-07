@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Enums\AcademicYearStatus;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['kinder_id', 'year', 'start_date', 'end_date'])]
+#[Fillable(['kinder_id', 'year', 'start_date', 'end_date', 'status', 'campaign_confirmed'])]
 class AcademicYear extends Model
 {
     use HasFactory;
@@ -18,6 +19,8 @@ class AcademicYear extends Model
         return [
             'start_date' => 'date',
             'end_date' => 'date',
+            'status' => AcademicYearStatus::class,
+            'campaign_confirmed' => 'boolean',
         ];
     }
 
