@@ -27,7 +27,9 @@ class AcademicYearFactory extends Factory
     }
 
     /**
-     * Make this the "current" year by spanning today's date.
+     * Make this the "current" year: activo (the actual source of truth AcademicYear::current()
+     * reads) with dates that also happen to span today, so anything still displaying start/end
+     * dates sees something sensible.
      */
     public function current(): static
     {
@@ -35,6 +37,7 @@ class AcademicYearFactory extends Factory
             'year' => now()->year,
             'start_date' => now()->subMonth(),
             'end_date' => now()->addMonths(6),
+            'status' => AcademicYearStatus::Activo,
         ]);
     }
 

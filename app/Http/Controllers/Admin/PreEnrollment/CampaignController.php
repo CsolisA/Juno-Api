@@ -185,26 +185,13 @@ class CampaignController extends Controller
     }
 
     /**
-     * One notification instance per family, routed to every status=true guardian email (or
-     * family.user as a fallback, per §9.2) — mirrors the anonymous-routing technique already
-     * used by FamilyPasswordController::forgot(), since Family isn't Notifiable.
+     * One notification instance per family, routed to every notifiable email — mirrors the
+     * anonymous-routing technique already used by FamilyPasswordController::forgot(), since
+     * Family isn't Notifiable.
      */
     private function sendCampaignOpenedNotification(PreEnrollmentCampaign $campaign, Family $family): void
     {
-        $emails = $family->guardians
-            ->where('status', true)
-            ->pluck('email')
-            ->filter()
-            ->unique();
-
-        // §9.2's fallback assumes `user` can double as a contact address, which only holds when
-        // it happens to be email-shaped (it's a login username otherwise, e.g. seeded "rodmor") —
-        // guard so a non-email `user` never gets handed to the mailer as a recipient.
-        if ($emails->isEmpty() && filter_var($family->user, FILTER_VALIDATE_EMAIL)) {
-            $emails = collect([$family->user]);
-        }
-
-        foreach ($emails as $email) {
+        foreach ($this->campaignReadinessService->notifiableEmails($family) as $email) {
             Notification::route('mail', $email)
                 ->notify(new PreEnrollmentCampaignOpenedNotification($campaign, $family));
         }

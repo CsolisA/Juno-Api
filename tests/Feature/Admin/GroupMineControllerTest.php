@@ -89,6 +89,46 @@ class GroupMineControllerTest extends TestCase
         $response->assertStatus(404);
     }
 
+    /**
+     * Reproduces the real-world bug: a year whose dates span today but was never activated has
+     * a real, active-enrolled roster yet shows no active group until a director activates it.
+     */
+    public function test_returns_404_when_the_year_has_enrollments_but_was_never_activated(): void
+    {
+        $kinder = Kinder::factory()->create();
+        $professor = AdminUser::factory()->create(['kinder_id' => $kinder->id, 'type' => AdminUserType::Professor]);
+        $grade = Grade::factory()->create();
+        $academicYear = AcademicYear::factory()->planeacion()->create([
+            'kinder_id' => $kinder->id,
+            'start_date' => now()->subMonth(),
+            'end_date' => now()->addMonths(6),
+        ]);
+        $group = Group::factory()->create([
+            'grade_id' => $grade->id,
+            'academic_year_id' => $academicYear->id,
+            'professor_id' => $professor->id,
+        ]);
+        $family = Family::factory()->create(['kinder_id' => $kinder->id]);
+        $student = Student::factory()->create(['family_id' => $family->id]);
+        Enrollment::factory()->create([
+            'student_id' => $student->id,
+            'academic_year_id' => $academicYear->id,
+            'group_id' => $group->id,
+            'grade_id' => $grade->id,
+        ]);
+
+        Sanctum::actingAs($professor, ['*']);
+
+        $this->getJson('/api/admin/groups/me')->assertStatus(404);
+
+        $director = AdminUser::factory()->create(['kinder_id' => $kinder->id, 'type' => AdminUserType::Director]);
+        Sanctum::actingAs($director, ['*']);
+        $this->postJson("/api/admin/academic-years/{$academicYear->id}/activate")->assertOk();
+
+        Sanctum::actingAs($professor, ['*']);
+        $this->getJson('/api/admin/groups/me')->assertOk()->assertJsonPath('id', $group->id);
+    }
+
     public function test_professor_cannot_list_all_groups(): void
     {
         $kinder = Kinder::factory()->create();

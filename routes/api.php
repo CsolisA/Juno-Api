@@ -5,9 +5,12 @@ use App\Http\Controllers\Admin\GroupController;
 use App\Http\Controllers\Admin\PreEnrollment\CampaignController;
 use App\Http\Controllers\Admin\PreEnrollment\ExclusionController;
 use App\Http\Controllers\Admin\PreEnrollment\FormController;
+use App\Http\Controllers\Admin\PreEnrollment\LateAddController;
 use App\Http\Controllers\Admin\PreEnrollment\ReadinessController;
 use App\Http\Controllers\Admin\PreEnrollment\SelectionController;
+use App\Http\Controllers\Admin\PreEnrollment\SubmissionController;
 use App\Http\Controllers\Admin\StaffController;
+use App\Http\Controllers\Admin\StudentController;
 use App\Http\Controllers\Admin\StudentGroupController;
 use App\Http\Controllers\Auth\AdminAuthController;
 use App\Http\Controllers\Auth\AuthController;
@@ -94,11 +97,15 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/admin/groups/me', [GroupController::class, 'mine']);
 
+        Route::get('/admin/students/{studentId}', [StudentController::class, 'show'])->whereNumber('studentId');
+
         Route::middleware('director')->group(function () {
             Route::get('/admin/groups', [GroupController::class, 'index']);
             Route::get('/admin/groups/{groupId}', [GroupController::class, 'show'])->whereNumber('groupId');
             Route::patch('/admin/groups/{groupId}', [GroupController::class, 'update'])->whereNumber('groupId');
 
+            Route::get('/admin/students', [StudentController::class, 'index']);
+            Route::patch('/admin/students/{studentId}', [StudentController::class, 'update'])->whereNumber('studentId');
             Route::patch('/admin/students/{studentId}/group', [StudentGroupController::class, 'update']);
         });
 
@@ -114,11 +121,15 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('/campaigns/{campaignId}/forms/bulk-exclusion', [ExclusionController::class, 'bulk']);
             Route::get('/campaigns/{campaignId}/forms', [FormController::class, 'index']);
             Route::get('/campaigns/{campaignId}/forms/{formId}', [FormController::class, 'show']);
-            Route::patch('/campaigns/{campaignId}/forms/{formId}', [FormController::class, 'update']);
             Route::patch('/campaigns/{campaignId}/forms/{formId}/target-grade', [FormController::class, 'targetGrade']);
-            Route::post('/campaigns/{campaignId}/forms/{formId}/approve', [FormController::class, 'approve']);
-            Route::post('/campaigns/{campaignId}/forms/{formId}/reopen', [FormController::class, 'reopen']);
             Route::get('/campaigns/{campaignId}/forms/{formId}/changes', [FormController::class, 'changes']);
+
+            Route::post('/campaigns/{campaignId}/students/late-add', [LateAddController::class, 'store']);
+
+            Route::get('/campaigns/{campaignId}/submissions', [SubmissionController::class, 'index']);
+            Route::patch('/campaigns/{campaignId}/submissions/{familyId}', [SubmissionController::class, 'update']);
+            Route::post('/campaigns/{campaignId}/submissions/{familyId}/reopen', [SubmissionController::class, 'reopen']);
+            Route::post('/campaigns/{campaignId}/submissions/{familyId}/approve', [SubmissionController::class, 'approve']);
         });
     });
 });

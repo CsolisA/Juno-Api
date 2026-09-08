@@ -1,8 +1,8 @@
 <?php
 
-namespace Tests\Feature\Admin\PreEnrollment;
+namespace Tests\Feature\Family;
 
-use App\Enums\PreEnrollmentFormStatus;
+use App\Enums\PreEnrollmentCampaignStatus;
 use App\Models\AcademicYear;
 use App\Models\AdminUser;
 use App\Models\Enrollment;
@@ -10,6 +10,7 @@ use App\Models\Family;
 use App\Models\Grade;
 use App\Models\Group;
 use App\Models\Kinder;
+use App\Models\PreEnrollmentFamilyDraft;
 use App\Models\PreEnrollmentForm;
 use App\Models\Student;
 use App\Services\PreEnrollment\CampaignCreationService;
@@ -18,23 +19,22 @@ use Illuminate\Support\Facades\Notification;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
-class FormControllerTest extends TestCase
+class PreEnrollmentAutoCloseTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function submittedFormForAdmin(): array
+    public function test_campaign_auto_closes_once_every_family_has_submitted(): void
     {
         Notification::fake();
 
         $kinder = Kinder::factory()->create();
         $admin = AdminUser::factory()->create(['kinder_id' => $kinder->id]);
         $grade = Grade::factory()->create(['order' => 0, 'is_final' => false]);
-        Grade::factory()->create(['order' => 1, 'is_final' => true]);
         $academicYear = AcademicYear::factory()->current()->create(['kinder_id' => $kinder->id]);
         $group = Group::factory()->create(['grade_id' => $grade->id, 'academic_year_id' => $academicYear->id]);
 
         $family = Family::factory()->create(['kinder_id' => $kinder->id]);
-        $student = Student::factory()->create(['family_id' => $family->id, 'blood_type' => 'O+']);
+        $student = Student::factory()->create(['family_id' => $family->id]);
         Enrollment::factory()->create([
             'student_id' => $student->id,
             'academic_year_id' => $academicYear->id,
@@ -47,27 +47,30 @@ class FormControllerTest extends TestCase
         Sanctum::actingAs($admin, ['*']);
         $this->postJson("/api/admin/pre-enrollment/campaigns/{$campaign->id}/open")->assertOk();
 
-        $form = PreEnrollmentForm::where('campaign_id', $campaign->id)->where('student_id', $student->id)->firstOrFail();
-        $form->update([
-            'status' => PreEnrollmentFormStatus::Submitted,
-            'submitted_at' => now(),
-            'submitted_snapshot' => array_merge($form->draft_payload, [
-                'student.bloodType' => ['value' => 'A+', 'sourceValue' => 'O+'],
-            ]),
-        ]);
+        Sanctum::actingAs($family, ['*']);
 
-        return [$campaign, $form, $admin];
-    }
+        foreach (PreEnrollmentForm::REQUIRED_DRAFT_PATHS as $i => $path) {
+            $this->patchJson("/api/family/pre-enrollment/{$campaign->id}/students/{$student->id}", [
+                'revision' => $i,
+                'changes' => [$path => "value-{$i}"],
+            ])->assertOk();
+        }
 
-    public function test_show_returns_current_proposed_and_changed_flag(): void
-    {
-        [$campaign, $form, $admin] = $this->submittedFormForAdmin();
+        $motherFields = [];
+        foreach (PreEnrollmentFamilyDraft::GUARDIAN_REQUIRED_FIELDS as $field) {
+            $motherFields["guardians.mother.{$field}"] = "value-{$field}";
+        }
+        $this->patchJson("/api/family/pre-enrollment/{$campaign->id}/family", [
+            'revision' => 0,
+            'changes' => $motherFields,
+        ])->assertOk();
 
-        $response = $this->getJson("/api/admin/pre-enrollment/campaigns/{$campaign->id}/forms/{$form->id}")->assertOk();
+        $this->assertSame(PreEnrollmentCampaignStatus::Open, $campaign->fresh()->status);
 
-        $field = $response->json('fields')['student.bloodType'];
-        $this->assertSame('O+', $field['current']);
-        $this->assertSame('A+', $field['proposed']);
-        $this->assertTrue($field['changed']);
+        $this->postJson("/api/family/pre-enrollment/{$campaign->id}/submit")->assertOk();
+
+        $campaign->refresh();
+        $this->assertSame(PreEnrollmentCampaignStatus::Closed, $campaign->status);
+        $this->assertNotNull($campaign->closed_at);
     }
 }

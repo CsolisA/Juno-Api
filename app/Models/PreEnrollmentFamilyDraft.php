@@ -7,8 +7,12 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Collection;
 
-#[Fillable(['campaign_id', 'family_id', 'draft_payload', 'revision', 'submitted_at'])]
+#[Fillable([
+    'campaign_id', 'family_id', 'draft_payload', 'revision', 'submitted_at',
+    'approved_at', 'approved_by', 'reopened_at',
+])]
 class PreEnrollmentFamilyDraft extends Model
 {
     use HasFactory;
@@ -19,6 +23,8 @@ class PreEnrollmentFamilyDraft extends Model
             'draft_payload' => 'array',
             'revision' => 'integer',
             'submitted_at' => 'datetime',
+            'approved_at' => 'datetime',
+            'reopened_at' => 'datetime',
         ];
     }
 
@@ -36,6 +42,14 @@ class PreEnrollmentFamilyDraft extends Model
     public function family(): BelongsTo
     {
         return $this->belongsTo(Family::class);
+    }
+
+    /**
+     * @return BelongsTo<AdminUser, $this>
+     */
+    public function approvedBy(): BelongsTo
+    {
+        return $this->belongsTo(AdminUser::class, 'approved_by');
     }
 
     /**
@@ -77,5 +91,28 @@ class PreEnrollmentFamilyDraft extends Model
     public function hasAnyCompleteGuardian(): bool
     {
         return $this->hasCompleteGuardian('mother') || $this->hasCompleteGuardian('father');
+    }
+
+    /**
+     * The family's aggregate status across this campaign — derived, not stored, since the
+     * underlying facts (this draft's own timestamps, each child's PreEnrollmentForm) are the
+     * single source of truth and must never drift out of sync with a duplicated status column.
+     *
+     * @param  Collection<int, PreEnrollmentForm>  $formsForFamily  This family's non-excluded
+     *                                                              forms in the same campaign.
+     */
+    public function statusGiven(Collection $formsForFamily): string
+    {
+        if ($this->approved_at !== null) {
+            return 'approved';
+        }
+
+        if ($this->submitted_at !== null) {
+            return 'submitted';
+        }
+
+        $started = ! empty($this->draft_payload) || $formsForFamily->contains(fn (PreEnrollmentForm $form) => $form->started_at !== null);
+
+        return $started ? 'in_progress' : 'not_started';
     }
 }

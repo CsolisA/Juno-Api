@@ -54,6 +54,27 @@ class CampaignReadinessService
         return $this->readyFamilies($campaign)->count();
     }
 
+    /**
+     * Every status=true guardian email for a family, falling back to family.user (per §9.2) —
+     * shared by the launch and late-add notifiers so "who gets emailed" never drifts between them.
+     *
+     * @return Collection<int, string>
+     */
+    public function notifiableEmails(Family $family): Collection
+    {
+        $emails = $family->guardians
+            ->where('status', true)
+            ->pluck('email')
+            ->filter()
+            ->unique();
+
+        if ($emails->isEmpty() && filter_var($family->user, FILTER_VALIDATE_EMAIL)) {
+            $emails = collect([$family->user]);
+        }
+
+        return $emails->values();
+    }
+
     private function isReady(Family $family): bool
     {
         $hasGuardianEmail = $family->guardians->contains(fn ($guardian) => $guardian->status && filled($guardian->email));

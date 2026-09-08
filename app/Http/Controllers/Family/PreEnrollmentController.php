@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Family\PreEnrollment\ScopesPreEnrollmentToFamily;
 use App\Models\Family;
 use App\Models\PreEnrollmentForm;
+use App\Services\PreEnrollment\CampaignAutoCloseService;
 use App\Services\PreEnrollment\DraftPayloadMerger;
 use App\Services\PreEnrollment\FieldChangeRecorder;
 use Illuminate\Http\JsonResponse;
@@ -19,7 +20,10 @@ class PreEnrollmentController extends Controller
 {
     use ScopesPreEnrollmentToFamily;
 
-    public function __construct(private readonly FieldChangeRecorder $fieldChangeRecorder) {}
+    public function __construct(
+        private readonly FieldChangeRecorder $fieldChangeRecorder,
+        private readonly CampaignAutoCloseService $campaignAutoCloseService,
+    ) {}
 
     /**
      * The alert payload for the portal dashboard — null when this family has nothing to act on:
@@ -241,6 +245,8 @@ class PreEnrollmentController extends Controller
             $this->fieldChangeRecorder->recordFamilyDraftSubmission($draft, $draft->draft_payload, ActorType::Family, $family->id);
             $draft->update(['submitted_at' => now()]);
         }
+
+        $this->campaignAutoCloseService->evaluate($campaign);
 
         return response()->json(['submittedAt' => now()->toIso8601String()]);
     }

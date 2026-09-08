@@ -2,31 +2,20 @@
 
 namespace App\Http\Controllers\Admin\PreEnrollment;
 
-use App\Enums\ActorType;
-use App\Enums\PreEnrollmentFormStatus;
 use App\Http\Controllers\Controller;
 use App\Models\AdminUser;
 use App\Models\Grade;
 use App\Models\PreEnrollmentCampaign;
 use App\Models\PreEnrollmentForm;
-use App\Services\PreEnrollment\DraftPayloadMerger;
 use App\Services\PreEnrollment\DraftPrefillService;
-use App\Services\PreEnrollment\Exceptions\FormNotSubmittedException;
-use App\Services\PreEnrollment\FieldChangeRecorder;
-use App\Services\PreEnrollment\FormApprovalService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\ValidationException;
 
 class FormController extends Controller
 {
     use ScopesCampaignToKinder;
 
-    public function __construct(
-        private readonly DraftPrefillService $draftPrefillService,
-        private readonly FieldChangeRecorder $fieldChangeRecorder,
-        private readonly FormApprovalService $formApprovalService,
-    ) {}
+    public function __construct(private readonly DraftPrefillService $draftPrefillService) {}
 
     /**
      * Paginated, filterable list of forms in a campaign.
@@ -130,32 +119,6 @@ class FormController extends Controller
     }
 
     /**
-     * Director corrections — mutates submitted_snapshot (or draft_payload while still pre-submit)
-     * and, unlike family autosave, always writes audit rows per §9 Q11.
-     */
-    public function update(Request $request, int $campaignId, int $formId): JsonResponse
-    {
-        /** @var AdminUser $admin */
-        $admin = $request->user();
-        $campaign = $this->campaignForAdmin($campaignId, $admin);
-        $form = $this->formForCampaign($campaign, $formId);
-
-        $data = $request->validate([
-            'changes' => ['required', 'array'],
-        ]);
-
-        $field = $form->submitted_snapshot !== null ? 'submitted_snapshot' : 'draft_payload';
-        $old = $form->{$field} ?? [];
-        $new = DraftPayloadMerger::merge($old, $data['changes']);
-
-        $this->fieldChangeRecorder->recordFormChanges($form, $old, $new, ActorType::Admin, $admin->id);
-
-        $form->update([$field => $new]);
-
-        return $this->show($request, $campaignId, $formId);
-    }
-
-    /**
      * Level override from the form-detail screen (separate from the campaign-creation-time
      * override, per §9 Q3 — both write the same tracking columns).
      */
@@ -181,55 +144,6 @@ class FormController extends Controller
             'formId' => $form->id,
             'targetGrade' => ['id' => $data['targetGradeId'], 'name' => Grade::findOrFail($data['targetGradeId'])->name],
         ]);
-    }
-
-    /**
-     * Writes submitted_snapshot to live tables and creates the projected enrollment.
-     */
-    public function approve(Request $request, int $campaignId, int $formId): JsonResponse
-    {
-        /** @var AdminUser $admin */
-        $admin = $request->user();
-        $campaign = $this->campaignForAdmin($campaignId, $admin);
-        $form = $this->formForCampaign($campaign, $formId);
-
-        try {
-            $enrollment = $this->formApprovalService->approve($form, $admin->id);
-        } catch (FormNotSubmittedException) {
-            throw ValidationException::withMessages([
-                'status' => 'Solo un formulario enviado puede aprobarse.',
-            ]);
-        }
-
-        return response()->json([
-            'formId' => $form->id,
-            'status' => $form->fresh()->status->value,
-            'enrollmentId' => $enrollment->id,
-        ]);
-    }
-
-    /**
-     * Sends a submitted form back to the family with a note, per §6.1.
-     */
-    public function reopen(Request $request, int $campaignId, int $formId): JsonResponse
-    {
-        /** @var AdminUser $admin */
-        $admin = $request->user();
-        $campaign = $this->campaignForAdmin($campaignId, $admin);
-        $form = $this->formForCampaign($campaign, $formId);
-
-        abort_unless($form->status === PreEnrollmentFormStatus::Submitted, 422, 'Solo un formulario enviado puede reabrirse.');
-
-        $data = $request->validate([
-            'note' => ['required', 'string'],
-        ]);
-
-        $form->update([
-            'status' => PreEnrollmentFormStatus::InProgress,
-            'family_notes' => $data['note'],
-        ]);
-
-        return response()->json(['formId' => $form->id, 'status' => $form->status->value]);
     }
 
     public function changes(Request $request, int $campaignId, int $formId): JsonResponse
