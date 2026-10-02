@@ -57,6 +57,11 @@ return [
     'frontend_url' => env('FRONTEND_URL', env('APP_URL', 'http://localhost')),
 
     /*
+    | Academic year the family onboarding wizard enrolls new children into (see Year2027Seeder).
+    */
+    'onboarding_year' => (int) env('ONBOARDING_YEAR', 2027),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------

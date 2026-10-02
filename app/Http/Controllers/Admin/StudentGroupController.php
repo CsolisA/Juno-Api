@@ -52,6 +52,13 @@ class StudentGroupController extends Controller
 
         $enrollment->update(['group_id' => $group->id, 'grade_id' => $group->grade_id]);
 
+        // Family views read the `student_group` pivot, so keep it in step with the enrollment:
+        // swap whatever group the student held in this academic year for the new one.
+        $student->groups()->detach(
+            Group::where('academic_year_id', $group->academic_year_id)->pluck('id'),
+        );
+        $student->groups()->attach($group->id);
+
         return response()->json([
             'id' => $student->id,
             'groupId' => $enrollment->group_id,

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AcademicYearController;
+use App\Http\Controllers\Admin\FamilyInviteController;
 use App\Http\Controllers\Admin\GroupController;
 use App\Http\Controllers\Admin\PreEnrollment\CampaignController;
 use App\Http\Controllers\Admin\PreEnrollment\ExclusionController;
@@ -29,6 +30,7 @@ use App\Http\Controllers\Family\FamilyProfileController;
 use App\Http\Controllers\Family\FamilyStudentController;
 use App\Http\Controllers\Family\KinderBrandingController;
 use App\Http\Controllers\Family\PreEnrollmentController;
+use App\Http\Controllers\Onboarding\OnboardingController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/kinder/branding', [KinderBrandingController::class, 'show']);
@@ -38,6 +40,24 @@ Route::post('/family/login', [FamilyAuthController::class, 'login']);
 Route::post('/family/password/forgot', [FamilyPasswordController::class, 'forgot']);
 Route::post('/family/password/reset', [FamilyPasswordController::class, 'reset']);
 Route::post('/auth/staff/accept-invite', [StaffInviteController::class, 'accept']);
+
+// Public family onboarding wizard (single-use invite link, token in the X-Invite-Token header).
+Route::prefix('onboarding')->middleware('throttle:60,1')->group(function () {
+    Route::get('/session', [OnboardingController::class, 'session']);
+    Route::patch('/draft', [OnboardingController::class, 'draft']);
+    Route::post('/submit', [OnboardingController::class, 'submit'])->middleware('throttle:10,1');
+
+    Route::prefix('catalogs')->group(function () {
+        Route::get('/grades', [GradeCatalogController::class, 'index']);
+        Route::get('/schedules', [ScheduleCatalogController::class, 'index']);
+        Route::get('/provinces', [ProvinceCatalogController::class, 'index']);
+        Route::get('/cantons', [CantonCatalogController::class, 'index']);
+        Route::get('/nationalities', [StaticCatalogController::class, 'nationalities']);
+        Route::get('/education-levels', [StaticCatalogController::class, 'educationLevels']);
+        Route::get('/marital-statuses', [StaticCatalogController::class, 'maritalStatuses']);
+        Route::get('/blood-types', [StaticCatalogController::class, 'bloodTypes']);
+    });
+});
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
@@ -107,6 +127,13 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/admin/students', [StudentController::class, 'index']);
             Route::patch('/admin/students/{studentId}', [StudentController::class, 'update'])->whereNumber('studentId');
             Route::patch('/admin/students/{studentId}/group', [StudentGroupController::class, 'update']);
+        });
+
+        Route::middleware('director')->prefix('admin/family-invites')->group(function () {
+            Route::get('/', [FamilyInviteController::class, 'index']);
+            Route::post('/', [FamilyInviteController::class, 'store']);
+            Route::post('/{inviteId}/regenerate', [FamilyInviteController::class, 'regenerate'])->whereNumber('inviteId');
+            Route::post('/{inviteId}/revoke', [FamilyInviteController::class, 'revoke'])->whereNumber('inviteId');
         });
 
         Route::middleware('director')->prefix('admin/pre-enrollment')->group(function () {

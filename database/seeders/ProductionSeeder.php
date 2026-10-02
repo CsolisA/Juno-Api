@@ -85,6 +85,8 @@ class ProductionSeeder extends Seeder
             $this->command?->info('Director already exists, left untouched.');
         }
 
+        $this->call(Year2027Seeder::class);
+
         $this->command?->info('Production data seeded.');
     }
 }

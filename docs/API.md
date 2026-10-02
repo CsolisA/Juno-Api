@@ -86,6 +86,7 @@ Store the `token` from the login response and the actor type (`admin` vs `family
 | POST | `/family/login` | See Authentication. |
 | POST | `/family/password/forgot` | See Authentication. |
 | POST | `/family/password/reset` | See Authentication. |
+| GET/PATCH/POST | `/onboarding/*` | Family onboarding wizard behind a single-use invite link. See "Family onboarding". |
 
 ⚠️ `KinderBrandingController` hardcodes `Kinder::first()` — it assumes a single-tenant deployment, not per-domain resolution.
 
@@ -201,6 +202,85 @@ Response shape (`formatCampaign`) shared across these: `{ id, name, status, acad
 | POST | `/campaigns/{id}/forms/{formId}/reopen` | `422` unless status is `submitted`. Body: `{ note: string }` (shown to the family). Returns `{ formId, status: "in_progress" }`. |
 | GET | `/campaigns/{id}/forms/{formId}/changes` | Full audit trail: `[{ fieldPath, oldValue, newValue, actorType: "family"|"admin", actorId, createdAt }]`. |
 
+## Family onboarding (public, single-use invite link)
+
+First-time load of families. The director generates a link per family; the family opens it, fills in guardians and any number of children, and submits. Submitting creates the `Family`, `Guardian`s, `Student`s and one **projected** `Enrollment` per child (academic year `ONBOARDING_YEAR`, default 2027) in that year's group for the level the family picked, and kills the link. Fees, uniform and document flags stay `null`/`false` for the director to fill in later.
+
+### Invite token
+
+- Link format: `{FRONTEND_URL}/registro/{token}` (a **SPA route**, not an API path).
+- The API never accepts the token in the URL path. Send it in the **`X-Invite-Token`** request header on every `/onboarding/*` call (keeps it out of access logs).
+- Only a sha256 hash is stored, so the plain link is returned **once** (on create/regenerate). Lost link → regenerate.
+- Valid for 14 days by default. Single use: it dies when the wizard is **submitted**, not when opened. Autosaved drafts survive refreshes until then.
+- An unknown, expired, revoked or already-used token all answer the **same `404`**, so show one neutral "link not valid, contact the school" screen.
+
+### Public endpoints (no auth, throttled: 60/min, submit 10/min)
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/onboarding/session` | `404` if the token isn't usable. `{ label, expiresAt, revision, draft, kinder: { name, mainColor, secondColor, fontName } }`. `draft` is whatever the SPA last saved (`{}` if nothing). |
+| PATCH | `/onboarding/draft` | Body: `{ revision: number, draft: object }`. Replaces the whole draft (the SPA owns its shape; **not** validated until submit, max ~200 KB). Success `{ revision, savedAt }`. Stale revision → `409` `{ message, revision, draft }`: merge the server draft, then retry with the returned `revision`. |
+| POST | `/onboarding/submit` | Body below. `201` `{ user, students }` (`user` = the generated family login). `422` field errors, `404` token no longer usable, `503` school misconfigured (no 2027 year/group/schedule for a level). A `503` or `422` leaves the token usable. |
+| GET | `/onboarding/catalogs/{name}` | Same as `/catalogs/*` without auth. `name` ∈ `grades`, `schedules` (`?gradeId`), `provinces`, `cantons` (`?provinceId` required), `nationalities`, `education-levels`, `marital-statuses`, `blood-types`. |
+
+### `POST /onboarding/submit` body (camelCase)
+
+```json
+{
+  "family": { "aboutUs": "string?", "referralSource": "facebook|instagram|other?" },
+  "guardians": [
+    {
+      "role": "mother|father|other",
+      "name": "", "lastNameOne": "", "lastNameTwo": "?",
+      "nationality": "", "idType": "cedula|dimex|passport?", "idNumber": "",
+      "birthDate": "YYYY-MM-DD?", "maritalStatus": "", "religion": "?",
+      "educationLevel": "", "occupation": "", "workplace": "",
+      "mobilePhone": "", "workPhone": "?", "livesWithChild": true,
+      "address": "", "email": "",
+      "usesWhatsapp": false, "usesFacebook": false, "usesInstagram": false, "usesThreads": false
+    }
+  ],
+  "students": [
+    {
+      "name": "", "lastName": "", "lastNameTwo": "",
+      "idType": "cedula|dimex|passport?", "idNumber": "", "birthDate": "YYYY-MM-DD",
+      "nationality": "", "province": "", "canton": "", "address": "",
+      "phone": "?", "bloodType": "?", "insurancePolicyNumber": "?",
+      "gradeId": 1, "scheduleId": "int? (must be offered for the grade; defaults to the grade's first)",
+      "transportType": "minibus|family|other?",
+      "medicalConditions": "?", "diagnosis": "?",
+      "takesMedication": false, "medicationDetails": "?",
+      "practicesSport": false, "sportDetails": "?",
+      "extraClasses": false, "extraClassesDetail": "?"
+    }
+  ]
+}
+```
+
+Rules worth surfacing in the UI:
+- `guardians`: 1–3 entries, must include a `mother` or `father` (password emails only go to those), at most one of each. Errors are keyed `guardians`.
+- `students`: 1–10 entries. `idNumber` must be unique across the whole school and not repeated within the request. The duplicate message is intentionally generic (`students.N.idNumber`: "…Comunícate con la escuela.") so it doesn't reveal whether the child already exists.
+- Validation errors are standard Laravel `422 { message, errors: { "students.0.idNumber": [...] } }`; map `students.N.*` / `guardians.N.*` back to the right step/card.
+- Wizard-only helper fields (e.g. a confirm-email input) are not sent; validate those client-side.
+
+What submit does: the family `user` (login) is generated as `{lastname}.{lastname2}NNNN`; the password is random and never shown. A welcome email goes to the mother's/father's address with the generated `user` and a link to `/portal/reset-password?token=...` (valid 7 days) so the family sets their own password. The `user` is also returned in the response so the success screen can show it.
+
+## Admin family invites (`auth:sanctum` + `admin` + `director`, prefix `/admin/family-invites`)
+
+Cross-kinder ids return `404`.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/` | Invites for the admin's kinder, newest first. Never includes the link. |
+| POST | `/` | Body: `{ label: string, phone?: string, expiresInDays?: 1-60 }`. `201` returns the invite **plus `url` and `whatsappUrl`** (shown only now). |
+| POST | `/{inviteId}/regenerate` | New link, old one dies immediately, status back to `pending`, fresh 14-day expiry. Works for pending/expired/revoked. `422` if already submitted. Returns invite + `url` + `whatsappUrl`. |
+| POST | `/{inviteId}/revoke` | `422` if already submitted. Returns the invite. |
+
+Invite shape: `{ id, label, phone, status, expiresAt, submittedAt, createdAt, createdBy, family }` where `status` is `pending | submitted | revoked | expired` (`expired` is derived from `expiresAt`) and `family` is `null` until submitted, then `{ id, name, user }`.
+
+- `phone` is normalized to digits with country code (an 8-digit number gets `506` prefixed).
+- `whatsappUrl` is ready to open: `https://wa.me/{phone}?text={encoded message with link}`; with no phone it's `https://wa.me/?text=...` (WhatsApp lets the user pick a chat).
+
 ## Enum reference
 
 | Enum | Values |
@@ -211,6 +291,8 @@ Response shape (`formatCampaign`) shared across these: `{ id, name, status, acad
 | `ActorType` | `family`, `admin` |
 | `GuardianRole` | `mother`, `father`, `other` |
 | `IdType` | `cedula` (default), `dimex`, `passport` |
+| `FamilyInviteStatus` (stored) | `pending`, `submitted`, `revoked` (API also reports derived `expired`) |
+| `EnrollmentStatus` | `projected`, `active`, `withdrawn`, `graduated` (wizard creates `projected`) |
 
 ## Known issues / gotchas
 
@@ -220,3 +302,6 @@ Response shape (`formatCampaign`) shared across these: `{ id, name, status, acad
 4. **`GET /kinder/branding`** assumes a single tenant (`Kinder::first()`), not per-domain.
 5. **No typed Form Request/Resource layer** for most endpoints — response shapes here are a snapshot of current controller code, not a guaranteed contract.
 6. **Cross-tenant/cross-family access returns `404`, not `403`** — don't special-case `403` handling for these authorization checks in the SPA.
+7. **Onboarding enrollments are `projected` in a `planeacion` year.** They don't show in teacher views, and the family dashboard shows the group (with the director as temporary professor) only once 2027 is activated. Reassign groups/professors before activating.
+8. **Onboarding students have `null` fees/uniform** until the director edits them.
+9. **Onboarding uses a separate axios instance** — the shared one's 401 handler would redirect to the login screen.
