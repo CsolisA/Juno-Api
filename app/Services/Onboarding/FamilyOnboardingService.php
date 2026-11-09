@@ -20,6 +20,7 @@ use App\Models\Guardian;
 use App\Models\Schedule;
 use App\Models\Student;
 use App\Notifications\FamilyWelcomeNotification;
+use App\Support\TermsAcceptance;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
@@ -95,6 +96,8 @@ class FamilyOnboardingService
             'students.*.sportDetails' => ['nullable', 'string', 'max:255'],
             'students.*.extraClasses' => ['nullable', 'boolean'],
             'students.*.extraClassesDetail' => ['nullable', 'string', 'max:255'],
+
+            ...TermsAcceptance::rules(),
         ];
     }
 
@@ -104,6 +107,7 @@ class FamilyOnboardingService
     public static function messages(): array
     {
         return [
+            ...TermsAcceptance::messages(),
             'students.*.idNumber.unique' => self::DUPLICATE_ID_MESSAGE,
             'students.*.idNumber.distinct' => 'Este número de identificación está repetido en la solicitud.',
         ];
@@ -168,6 +172,8 @@ class FamilyOnboardingService
             $locked->update([
                 'status' => FamilyInviteStatus::Submitted,
                 'submitted_at' => now(),
+                'terms_accepted_at' => $family->terms_accepted_at,
+                'terms_version' => $family->terms_version,
                 'family_id' => $family->id,
                 'draft_payload' => null,
             ]);
@@ -217,6 +223,8 @@ class FamilyOnboardingService
             'password' => Str::random(40),
             'about_us' => $data['family']['aboutUs'] ?? null,
             'referral_source' => $data['family']['referralSource'] ?? null,
+            'terms_accepted_at' => now(),
+            'terms_version' => $data['termsVersion'],
         ]);
     }
 

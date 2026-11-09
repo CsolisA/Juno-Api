@@ -86,6 +86,9 @@ Store the `token` from the login response and the actor type (`admin` vs `family
 | POST | `/family/login` | See Authentication. |
 | POST | `/family/password/forgot` | See Authentication. |
 | POST | `/family/password/reset` | See Authentication. |
+| GET | `/terms/current` | `{ version, pdfUrl, uploadedAt }` — the latest terms version (an integer) and the URL of its PDF. `404` if the director hasn't uploaded any yet. Throttled 60/min. |
+| GET | `/terms/current/pdf` | The current terms PDF, served inline (`application/pdf`). |
+| GET | `/terms/{version}/pdf` | Any past version's PDF (e.g. the one a family accepted). `404` if unknown. |
 | GET/PATCH/POST | `/onboarding/*` | Family onboarding wizard behind a single-use invite link. See "Family onboarding". |
 
 ⚠️ `KinderBrandingController` hardcodes `Kinder::first()` — it assumes a single-tenant deployment, not per-domain resolution.
@@ -157,10 +160,11 @@ This is the main feature area. Flow: admin opens a campaign → family gets an e
 
 4. **`PATCH /pre-enrollment/{campaignId}/students/{studentId}`** — autosave one student's section. Body: `{ revision: number, changes: {...}, reportIssue?: string }`. Same `409`/`422` behavior. `reportIssue` sets a note visible to admin and flags `hasReportedIssue`. Response: `{ revision, completionPercent, savedAt }`.
 
-5. **`POST /pre-enrollment/{campaignId}/submit`** — submits every included child at once (not per-student). `422` validation errors:
+5. **`POST /pre-enrollment/{campaignId}/submit`** — submits every included child at once (not per-student). Body: `{ termsAccepted: true, termsVersion: string }` — show the terms PDF first (see "Terms and conditions" below). `422` validation errors:
+   - `termsAccepted` / `termsVersion`: terms not accepted, or `termsVersion` is not the current one (re-fetch `GET /terms/current` and show the PDF again)
    - `students`: any included student's form is below 100% complete (lists which)
    - `household`: no guardian (mother or father) has a fully complete block
-   On success: snapshots all drafts, writes an audit trail of the changes, sets each form's status to `submitted`. Response: `{ submittedAt }`.
+   On success: snapshots all drafts, writes an audit trail of the changes, sets each form's status to `submitted`, and stores `terms_accepted_at` + `terms_version` on the family's draft for this campaign (accepted again on every campaign). Response: `{ submittedAt }`.
 
 6. **`GET /pre-enrollment/{campaignId}/receipt`** — confirmation view: `{ campaignId, name, students: [{ studentId, name, status, submittedAt }] }`.
 
@@ -225,8 +229,12 @@ First-time load of families. The director generates a link per family; the famil
 
 ### `POST /onboarding/submit` body (camelCase)
 
+`termsAccepted` (must be `true`) and `termsVersion` (must equal the current version number from `GET /terms/current`) are required; a missing/false acceptance or a stale version is a `422`. On success they are stored as `terms_accepted_at` / `terms_version` on the family and the invite.
+
 ```json
 {
+  "termsAccepted": true,
+  "termsVersion": 1,
   "family": { "aboutUs": "string?", "referralSource": "facebook|instagram|other?" },
   "guardians": [
     {
@@ -264,6 +272,21 @@ Rules worth surfacing in the UI:
 - Wizard-only helper fields (e.g. a confirm-email input) are not sent; validate those client-side.
 
 What submit does: the family `user` (login) is generated as `{lastname}.{lastname2}NNNN`; the password is random and never shown. A welcome email goes to the mother's/father's address with the generated `user` and a link to `/portal/reset-password?token=...` (valid 7 days) so the family sets their own password. The `user` is also returned in the response so the success screen can show it.
+
+## Terms and conditions
+
+Both submits (`POST /onboarding/submit`, `POST /family/pre-enrollment/{campaignId}/submit`) require the family to have accepted the current terms PDF. Both return `503` if the director hasn't uploaded any terms yet.
+
+Frontend flow: `GET /terms/current` → show the PDF in a modal → the family scrolls to the end and ticks "Acepto los términos y condiciones" → send `termsAccepted: true` and the `termsVersion` you were given along with the submit. The scroll-to-end check is frontend-only; the API enforces the acceptance and the version, and records when it happened. A stale `termsVersion` is a `422` on `termsVersion`: re-fetch `/terms/current` and show the PDF again.
+
+Versions are auto-incremented integers (1, 2, 3...). Every upload creates the next version and old files are kept, so what a family accepted can always be reopened with `GET /terms/{version}/pdf`. A new version only applies to future submits; nobody is asked to re-accept.
+
+### `GET /family/terms` (auth:sanctum + family) — settings tab
+`{ current: { version, pdfUrl, uploadedAt } | null, accepted: { version, acceptedAt, pdfUrl } | null }`. `accepted` is the family's most recent acceptance (latest pre-enrollment submit, otherwise onboarding), `null` if none. Use `pdfUrl` for "view / download a copy".
+
+### Director only (`auth:sanctum` + `admin` + `director`)
+- `GET /admin/terms` — every version, newest first: `[{ version, pdfUrl, uploadedAt, originalName, uploadedBy }]`.
+- `POST /admin/terms` — `multipart/form-data` with `file` (PDF, max 10 MB). Creates the next version and returns it (`201`). `422` on a missing/non-PDF file, `403` for professor/assistant.
 
 ## Admin family invites (`auth:sanctum` + `admin` + `director`, prefix `/admin/family-invites`)
 

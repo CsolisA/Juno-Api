@@ -12,6 +12,7 @@ use App\Models\PreEnrollmentForm;
 use App\Services\PreEnrollment\CampaignAutoCloseService;
 use App\Services\PreEnrollment\DraftPayloadMerger;
 use App\Services\PreEnrollment\FieldChangeRecorder;
+use App\Support\TermsAcceptance;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -208,6 +209,8 @@ class PreEnrollmentController extends Controller
         $campaign = $this->campaignForFamily($campaignId, $family);
         $this->assertCampaignOpenForEditing($campaign);
 
+        $terms = $request->validate(TermsAcceptance::rules(), TermsAcceptance::messages());
+
         $draft = $this->familyDraftFor($campaign, $family);
 
         $forms = PreEnrollmentForm::where('campaign_id', $campaign->id)
@@ -243,8 +246,13 @@ class PreEnrollmentController extends Controller
 
         if ($draft->submitted_at === null) {
             $this->fieldChangeRecorder->recordFamilyDraftSubmission($draft, $draft->draft_payload, ActorType::Family, $family->id);
-            $draft->update(['submitted_at' => now()]);
         }
+
+        $draft->update([
+            'submitted_at' => $draft->submitted_at ?? now(),
+            'terms_accepted_at' => now(),
+            'terms_version' => $terms['termsVersion'],
+        ]);
 
         $this->campaignAutoCloseService->evaluate($campaign);
 

@@ -13,6 +13,7 @@ use App\Http\Controllers\Admin\PreEnrollment\SubmissionController;
 use App\Http\Controllers\Admin\StaffController;
 use App\Http\Controllers\Admin\StudentController;
 use App\Http\Controllers\Admin\StudentGroupController;
+use App\Http\Controllers\Admin\TermsController as AdminTermsController;
 use App\Http\Controllers\Auth\AdminAuthController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\FamilyAuthController;
@@ -28,12 +29,21 @@ use App\Http\Controllers\Family\FamilyHistoryController;
 use App\Http\Controllers\Family\FamilyPasswordController;
 use App\Http\Controllers\Family\FamilyProfileController;
 use App\Http\Controllers\Family\FamilyStudentController;
+use App\Http\Controllers\Family\FamilyTermsController;
 use App\Http\Controllers\Family\KinderBrandingController;
 use App\Http\Controllers\Family\PreEnrollmentController;
 use App\Http\Controllers\Onboarding\OnboardingController;
+use App\Http\Controllers\TermsController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/kinder/branding', [KinderBrandingController::class, 'show']);
+
+// Terms PDF shown in the pre-submit modal. Public: onboarding families only hold an invite token.
+Route::prefix('terms')->middleware('throttle:60,1')->group(function () {
+    Route::get('/current', [TermsController::class, 'current']);
+    Route::get('/current/pdf', [TermsController::class, 'currentPdf']);
+    Route::get('/{version}/pdf', [TermsController::class, 'pdf'])->whereNumber('version');
+});
 
 Route::post('/admin/login', [AdminAuthController::class, 'login']);
 Route::post('/family/login', [FamilyAuthController::class, 'login']);
@@ -87,6 +97,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/students/{student}/authorized', [FamilyAuthorizedContactController::class, 'store']);
         Route::delete('/students/{student}/authorized/{authorized}', [FamilyAuthorizedContactController::class, 'destroy']);
         Route::get('/history', [FamilyHistoryController::class, 'show']);
+        Route::get('/terms', [FamilyTermsController::class, 'show']);
         Route::get('/pre-enrollment/active', [PreEnrollmentController::class, 'active']);
         Route::get('/pre-enrollment/{campaignId}', [PreEnrollmentController::class, 'show']);
         Route::patch('/pre-enrollment/{campaignId}/family', [PreEnrollmentController::class, 'updateFamilyDraft']);
@@ -127,6 +138,11 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/admin/students', [StudentController::class, 'index']);
             Route::patch('/admin/students/{studentId}', [StudentController::class, 'update'])->whereNumber('studentId');
             Route::patch('/admin/students/{studentId}/group', [StudentGroupController::class, 'update']);
+        });
+
+        Route::middleware('director')->prefix('admin/terms')->group(function () {
+            Route::get('/', [AdminTermsController::class, 'index']);
+            Route::post('/', [AdminTermsController::class, 'store']);
         });
 
         Route::middleware('director')->prefix('admin/family-invites')->group(function () {

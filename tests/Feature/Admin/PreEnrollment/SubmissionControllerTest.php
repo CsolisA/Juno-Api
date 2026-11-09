@@ -19,10 +19,12 @@ use App\Services\PreEnrollment\CampaignCreationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Laravel\Sanctum\Sanctum;
+use Tests\Concerns\AcceptsTerms;
 use Tests\TestCase;
 
 class SubmissionControllerTest extends TestCase
 {
+    use AcceptsTerms;
     use RefreshDatabase;
 
     /**
@@ -84,7 +86,7 @@ class SubmissionControllerTest extends TestCase
             'changes' => $motherFields,
         ])->assertOk();
 
-        $this->postJson("/api/family/pre-enrollment/{$campaign->id}/submit")->assertOk();
+        $this->postJson("/api/family/pre-enrollment/{$campaign->id}/submit", $this->termsPayload())->assertOk();
 
         return [$campaign->fresh(), $family, $students, $admin];
     }

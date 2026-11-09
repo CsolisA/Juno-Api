@@ -9,10 +9,12 @@ use App\Models\Group;
 use App\Models\Kinder;
 use App\Models\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Concerns\AcceptsTerms;
 use Tests\TestCase;
 
 abstract class OnboardingTestCase extends TestCase
 {
+    use AcceptsTerms;
     use RefreshDatabase;
 
     protected const TOKEN = 'plain-test-token';
@@ -63,6 +65,7 @@ abstract class OnboardingTestCase extends TestCase
     protected function payload(array $overrides = []): array
     {
         return array_replace_recursive([
+            ...$this->termsPayload(),
             'family' => ['aboutUs' => 'Un amigo', 'referralSource' => 'facebook'],
             'guardians' => [[
                 'role' => 'mother',

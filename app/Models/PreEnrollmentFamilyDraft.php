@@ -11,7 +11,7 @@ use Illuminate\Support\Collection;
 
 #[Fillable([
     'campaign_id', 'family_id', 'draft_payload', 'revision', 'submitted_at',
-    'approved_at', 'approved_by', 'reopened_at',
+    'approved_at', 'approved_by', 'reopened_at', 'terms_accepted_at', 'terms_version',
 ])]
 class PreEnrollmentFamilyDraft extends Model
 {
@@ -23,6 +23,7 @@ class PreEnrollmentFamilyDraft extends Model
             'draft_payload' => 'array',
             'revision' => 'integer',
             'submitted_at' => 'datetime',
+            'terms_accepted_at' => 'datetime',
             'approved_at' => 'datetime',
             'reopened_at' => 'datetime',
         ];

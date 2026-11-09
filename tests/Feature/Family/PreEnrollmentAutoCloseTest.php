@@ -17,10 +17,12 @@ use App\Services\PreEnrollment\CampaignCreationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Laravel\Sanctum\Sanctum;
+use Tests\Concerns\AcceptsTerms;
 use Tests\TestCase;
 
 class PreEnrollmentAutoCloseTest extends TestCase
 {
+    use AcceptsTerms;
     use RefreshDatabase;
 
     public function test_campaign_auto_closes_once_every_family_has_submitted(): void
@@ -67,7 +69,7 @@ class PreEnrollmentAutoCloseTest extends TestCase
 
         $this->assertSame(PreEnrollmentCampaignStatus::Open, $campaign->fresh()->status);
 
-        $this->postJson("/api/family/pre-enrollment/{$campaign->id}/submit")->assertOk();
+        $this->postJson("/api/family/pre-enrollment/{$campaign->id}/submit", $this->termsPayload())->assertOk();
 
         $campaign->refresh();
         $this->assertSame(PreEnrollmentCampaignStatus::Closed, $campaign->status);

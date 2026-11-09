@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Laravel\Sanctum\HasApiTokens;
 
-#[Fillable(['kinder_id', 'last_name_one', 'last_name_two', 'user', 'password', 'about_us', 'referral_source'])]
+#[Fillable(['kinder_id', 'last_name_one', 'last_name_two', 'user', 'password', 'about_us', 'referral_source', 'terms_accepted_at', 'terms_version'])]
 #[Hidden(['password'])]
 class Family extends Authenticatable
 {
@@ -22,6 +22,7 @@ class Family extends Authenticatable
     {
         return [
             'password' => 'hashed',
+            'terms_accepted_at' => 'datetime',
             'referral_source' => ReferralSource::class,
         ];
     }

@@ -16,6 +16,25 @@ use Illuminate\Support\Facades\Notification;
 
 class OnboardingSubmitTest extends OnboardingTestCase
 {
+    public function test_submit_requires_accepting_the_current_terms(): void
+    {
+        $this->invite();
+
+        $without = $this->payload();
+        unset($without['termsAccepted'], $without['termsVersion']);
+
+        $this->postJson('/api/onboarding/submit', $without, $this->tokenHeader())
+            ->assertStatus(422)->assertJsonValidationErrors(['termsAccepted', 'termsVersion']);
+
+        $this->postJson('/api/onboarding/submit', $this->payload(['termsAccepted' => false]), $this->tokenHeader())
+            ->assertStatus(422)->assertJsonValidationErrors('termsAccepted');
+
+        $this->postJson('/api/onboarding/submit', $this->payload(['termsVersion' => 999]), $this->tokenHeader())
+            ->assertStatus(422)->assertJsonValidationErrors('termsVersion');
+
+        $this->assertSame(0, Family::count());
+    }
+
     public function test_submit_creates_family_guardians_students_and_projected_enrollments(): void
     {
         Notification::fake();
@@ -42,6 +61,10 @@ class OnboardingSubmitTest extends OnboardingTestCase
 
         $family = Family::firstOrFail();
         $response->assertJson(['user' => $family->user, 'students' => 2]);
+        $this->assertNotNull($family->terms_accepted_at);
+        $this->assertSame((string) $this->currentTerms()->version, $family->terms_version);
+        $this->assertEquals($family->terms_accepted_at, $invite->fresh()->terms_accepted_at);
+        $this->assertSame((string) $this->currentTerms()->version, $invite->fresh()->terms_version);
         $this->assertSame('Pérez', $family->last_name_one);
         $this->assertSame(1, $family->guardians()->count());
         $this->assertTrue($family->guardians()->first()->is_primary_contact);

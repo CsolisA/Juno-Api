@@ -19,10 +19,12 @@ use App\Services\PreEnrollment\CampaignCreationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Laravel\Sanctum\Sanctum;
+use Tests\Concerns\AcceptsTerms;
 use Tests\TestCase;
 
 class PreEnrollmentFormTest extends TestCase
 {
+    use AcceptsTerms;
     use RefreshDatabase;
 
     private function openCampaignWithOneStudent(): array
@@ -84,12 +86,16 @@ class PreEnrollmentFormTest extends TestCase
             'changes' => $motherFields,
         ])->assertOk();
 
-        $submit = $this->postJson("/api/family/pre-enrollment/{$campaign->id}/submit")->assertOk();
+        $submit = $this->postJson("/api/family/pre-enrollment/{$campaign->id}/submit", $this->termsPayload())->assertOk();
 
         $form->refresh();
         $this->assertSame(PreEnrollmentFormStatus::Submitted, $form->status);
         $this->assertNotNull($form->submitted_at);
         $this->assertNotNull($form->submitted_snapshot);
+
+        $draft = PreEnrollmentFamilyDraft::where('campaign_id', $campaign->id)->where('family_id', $family->id)->firstOrFail();
+        $this->assertNotNull($draft->terms_accepted_at);
+        $this->assertSame($this->currentTerms()->version, (int) $draft->terms_version);
 
         $this->assertDatabaseHas('pre_enrollment_field_changes', [
             'form_id' => $form->id,
@@ -98,13 +104,40 @@ class PreEnrollmentFormTest extends TestCase
         ]);
     }
 
+    public function test_submit_requires_accepting_the_terms(): void
+    {
+        [$campaign, $family] = $this->openCampaignWithOneStudent();
+
+        Sanctum::actingAs($family, ['*']);
+
+        $this->currentTerms();
+
+        $url = "/api/family/pre-enrollment/{$campaign->id}/submit";
+
+        $this->postJson($url)->assertStatus(422)->assertJsonValidationErrors(['termsAccepted', 'termsVersion']);
+        $this->postJson($url, $this->termsPayload(['termsAccepted' => false]))->assertStatus(422)->assertJsonValidationErrors('termsAccepted');
+        $this->postJson($url, $this->termsPayload(['termsVersion' => 999]))->assertStatus(422)->assertJsonValidationErrors('termsVersion');
+
+        $this->assertNull(PreEnrollmentFamilyDraft::where('family_id', $family->id)->first()?->terms_accepted_at);
+    }
+
+    public function test_submit_is_503_while_no_terms_have_been_uploaded(): void
+    {
+        [$campaign, $family] = $this->openCampaignWithOneStudent();
+
+        Sanctum::actingAs($family, ['*']);
+
+        $this->postJson("/api/family/pre-enrollment/{$campaign->id}/submit", ['termsAccepted' => true, 'termsVersion' => 1])
+            ->assertStatus(503);
+    }
+
     public function test_submit_rejects_incomplete_forms(): void
     {
         [$campaign, $family, $student] = $this->openCampaignWithOneStudent();
 
         Sanctum::actingAs($family, ['*']);
 
-        $this->postJson("/api/family/pre-enrollment/{$campaign->id}/submit")->assertStatus(422);
+        $this->postJson("/api/family/pre-enrollment/{$campaign->id}/submit", $this->termsPayload())->assertStatus(422);
     }
 
     public function test_autosave_rejects_stale_revision_with_409(): void

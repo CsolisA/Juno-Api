@@ -11,7 +11,7 @@ use Illuminate\Support\Str;
 
 #[Fillable([
     'kinder_id', 'token_hash', 'label', 'phone', 'status', 'expires_at', 'created_by',
-    'draft_payload', 'revision', 'family_id', 'submitted_at',
+    'draft_payload', 'revision', 'family_id', 'submitted_at', 'terms_accepted_at', 'terms_version',
 ])]
 class FamilyInvite extends Model
 {
@@ -25,6 +25,7 @@ class FamilyInvite extends Model
             'status' => FamilyInviteStatus::class,
             'expires_at' => 'datetime',
             'submitted_at' => 'datetime',
+            'terms_accepted_at' => 'datetime',
             'draft_payload' => 'array',
             'revision' => 'integer',
         ];
